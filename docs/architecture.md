@@ -10,9 +10,9 @@ For "go to the table and get close to the red mug":
 3. The mission server starts `claude -p` in `agents/orchestrator`, and returns an operation.
 4. The orchestrator asks the navigator to go to the mug. The navigator uses the robot MCP server and blocks on
    `wait_for_navigation`, which is fine here because nobody is waiting on this process.
-5. It asks the navigator to `look`, then calls `approach_object` with a visual prompt such as "red mug", never
+5. It calls `look`, then `approach_object` with a visual prompt such as "red mug", never
    a candidate id: the detector reads text, and the map's ids mean nothing to it.
-6. It waits for the approach, and asks for a last `look`, because `reached` only means that Nav2 finished.
+6. It waits for the approach, and calls `look` again, because `reached` only means that Nav2 finished.
 7. Its final message is the mission result. The host of the chatter follows the operation, and runs one more LLM
    turn to tell the person on `llm_reasoning`, which the web chat and the voice read.
 
@@ -43,6 +43,13 @@ orchestrator's whole process group first, because it could otherwise send anothe
 **A mission that ends badly stops the robot.** After a timeout or a crash nobody watches the goal any more, so
 the mission server cancels it. Cancelling a mission does the same.
 
+**The camera is its own server.** `look` reads the image topic directly, so it works without the map or the
+navigation, and the orchestrator can verify a result with its own model, without spending a navigator turn. It
+refuses a frame older than `max_image_age`: these checks are what a mission relies on, so an old image would be
+worse than none. Taking a photo means this and nothing more: the image goes to the agent, and to the web chat on the
+`chat_image` topic if one is open. Nothing is saved. The chat has its own topic because `speech_bridge` reads
+`llm_reasoning` aloud.
+
 **One Nav2 server, one owner.** The navigator and `/reach_object` share a Nav2 server, where a new goal silently
 replaces the running one. `approach_object` reads the status topic and refuses while a goal is active. The other
 direction is not enforced: the robot server does not check for a running approach, and the orchestrator is only
@@ -57,8 +64,8 @@ folder.
 | Agent | Tools |
 |---|---|
 | Chatter | `start_mission`, `stop_all`, `get_tracked_operation`, `list_tracked_operations` |
-| Orchestrator | `Agent`, approach tools, and robot tools (see below) |
-| Navigator | The robot tools listed in `navigator.md`, except `cancel_operation` |
+| Orchestrator | `Agent`, approach tools, `look`, and robot tools (see below) |
+| Navigator | The tools listed in `navigator.md`: robot tools except `cancel_operation`, and `look` |
 
 The orchestrator should not use the robot tools, but it can. Tested with Claude Code 2.1.316: a server declared in
 the sub-agent's frontmatter did not connect, and denying `mcp__robot` to the orchestrator also denied it to the
@@ -81,7 +88,7 @@ With the real orchestrator and navigator over a scripted robot (`test/live_dry_r
 | Check | Result |
 |---|---|
 | Mission | Tools in the expected order, `red mug` sent to `/reach_object` |
-| Final report | Said that the camera did not confirm the approach, which was true: the fake image never changes |
+| Final report | Without a change in the image, it said the camera did not confirm the approach. With a mug that grows after the approach, it confirmed it |
 | Stop during a mission | Replied in well under a second, mission `cancelled`, navigation cancelled |
 
 These are not robot timings: the scripted robot answers at once, so a real mission takes much longer. These runs

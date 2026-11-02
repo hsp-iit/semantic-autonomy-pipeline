@@ -10,7 +10,7 @@ Pipeline:
    config/robot_mcp_server.xml), found through the 'yarp_mcpServer_core.servers' entry point.
    It serves MCP over streamable HTTP and advertises the URL on /mcp_server/<server_name>/info:o.
 2. _initialize() spins an rclpy node in a background thread. RobotBridge holds its clients for the
-   semantic map server (query_objects, describe_area, pub_goal, index_map), the camera service, the
+   semantic map server (query_objects, describe_area, pub_goal, index_map), the
    Nav2 NavigateToPose / ComputePathToPose actions, and a tf buffer for the robot pose.
 3. Each MCP tool is a thin async wrapper that runs the blocking ROS call in a worker thread, so the
    MCP event loop stays responsive while the robot drives.
@@ -44,7 +44,7 @@ from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
 from nav2_msgs.action import NavigateToPose, ComputePathToPose
-from ros2_vlmaps_interfaces.srv import QueryObjects, DescribeArea, PublishGoal, IndexMap, CameraRGB
+from ros2_vlmaps_interfaces.srv import QueryObjects, DescribeArea, PublishGoal, IndexMap
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from mcp.server.mcpserver.exceptions import ToolError
@@ -74,14 +74,12 @@ DEFAULT_PARAMS = {
     'describe_area_service': 'semantic_map_server/describe_area',
     'goal_pub_service': 'semantic_map_server/pub_goal',
     'index_map_service': 'semantic_map_server/index_map',
-    'camera_service': 'semantic_map_builder/robot_camera_rgb',
     'navigate_action': 'navigate_to_pose',
     'compute_path_action': 'compute_path_to_pose',
     'footprint_radius': 0.8,                    # robot footprint radius (m), clearance from objects
     'facing_conf_threshold': 0.5,               # min facing_conf to approach an object from its front side
     'approach_conf_threshold': 0.4,             # min approach_conf to approach from the observed side
     'lies_flat_threshold': 0.6,                 # top_fraction above which an object has no front side
-    'camera_max_width': 960,                    # px, images are downscaled before being sent to the LLM
 }
 
 
@@ -120,7 +118,6 @@ class RobotBridge:
         self.facing_conf_threshold = p('facing_conf_threshold')
         self.approach_conf_threshold = p('approach_conf_threshold')
         self.lies_flat_threshold = p('lies_flat_threshold')
-        self.camera_max_width = p('camera_max_width')
 
         cb = ReentrantCallbackGroup()
         self.tf_buffer = Buffer()
@@ -129,7 +126,6 @@ class RobotBridge:
         self.describe_client = node.create_client(DescribeArea, p('describe_area_service'), callback_group=cb)
         self.goal_client = node.create_client(PublishGoal, p('goal_pub_service'), callback_group=cb)
         self.index_client = node.create_client(IndexMap, p('index_map_service'), callback_group=cb)
-        self.camera_client = node.create_client(CameraRGB, p('camera_service'), callback_group=cb)
         self.nav_client = ActionClient(node, NavigateToPose, p('navigate_action'), callback_group=cb)
         self.path_client = ActionClient(node, ComputePathToPose, p('compute_path_action'), callback_group=cb)
         self.marker_pub = node.create_publisher(Marker, '/llm_marker', 10)
@@ -318,29 +314,6 @@ class RobotBridge:
         if not response.is_ok:
             raise RuntimeError(response.error_msg)
         return f"'{category}' highlighted in RViz (red = match, blue = rest of the map)"
-
-    def look(self):
-        response = self._call(self.camera_client, CameraRGB.Request(), timeout=15.0)
-        if not response.is_ok:
-            raise RuntimeError(f"image not available: {response.error_msg}")
-        h, w = int(response.rgb.height), int(response.rgb.width)
-        raw = np.frombuffer(response.rgb.data, dtype=np.uint8)
-        if h <= 0 or w <= 0 or raw.size % (h * w) != 0:
-            raise RuntimeError("image not available: invalid buffer")
-        img = raw.reshape(h, w, raw.size // (h * w))
-        enc = str(response.rgb.encoding).lower()
-        if img.shape[2] == 1:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        elif enc.startswith('rgb'):
-            img = cv2.cvtColor(img[:, :, :3], cv2.COLOR_RGB2BGR)
-        else:
-            img = img[:, :, :3]
-        if w > self.camera_max_width:
-            img = cv2.resize(img, (self.camera_max_width, int(h * self.camera_max_width / w)))
-        ok, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        if not ok:
-            raise RuntimeError("jpeg encoding failed")
-        return buf.tobytes(), img.shape[1], img.shape[0]
 
     # ---------------------------------------------------------------- goal geometry
     def candidate(self, cand_id):
@@ -761,16 +734,6 @@ class Yarp_mcpServer_Robot(Ros2NodeMixin, Yarp_mcpServer_Operations):
     async def highlight_in_rviz(self, category: str) -> HighlightResult:
         """Show the voxels matching a category in RViz (for the human watching). Does not return positions."""
         return {"message": await self._run(self.bridge.highlight, category)}
-
-    @mcp_tool()
-    async def look(self) -> CallToolResult:
-        """Current RGB image from the robot camera. Use it to visually confirm an object or describe the scene."""
-        jpeg, width, height = await self._run(self.bridge.look)
-        info = {"width": width, "height": height, "image_index": 1}
-        return CallToolResult(
-            content=[TextContent(type="text", text=json.dumps(info)),
-                     ImageContent(type="image", data=base64.b64encode(jpeg).decode(), mime_type="image/jpeg")],
-            structured_content=info)
 
     # ---------------------------------------------------------------- navigation tools
     @mcp_tool(structured_output=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts the agent layers: robot, approach and mission MCP servers, chatter.
+# Starts the agent layers: robot, camera, approach and mission MCP servers, chatter.
 # Needs yarpserver, the semantic map server and Nav2. For the approach it needs the manipulation-approach
 # pipeline, which runs on its own. Ctrl+C stops all of them, which cancels any goal they sent.
 #
@@ -32,7 +32,7 @@ stop_all() {
 
 pids=()
 trap stop_all INT TERM
-for server in robot approach mission; do
+for server in robot camera approach mission; do
     python3 -m yarp_mcpServer_core.launcher --config "$PKG/config/${server}_mcp_server.xml" &
     pids+=($!)
 done

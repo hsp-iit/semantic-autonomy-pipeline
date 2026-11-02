@@ -9,6 +9,7 @@ Each server runs in its own process, as in the real pipeline, with a scripted cl
   - MCP ports starting at AUTONOMY_TEST_PORT, default 18870
 """
 import asyncio
+import base64
 import json
 import os
 import signal
@@ -19,6 +20,9 @@ import threading
 import time
 import traceback
 
+import cv2
+import numpy as np
+
 os.environ['ROS_DOMAIN_ID'] = os.environ.get('AUTONOMY_TEST_DOMAIN_ID', '85')
 os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE'] = 'LOCALHOST'
 TMP = tempfile.mkdtemp(prefix='test_autonomy_')
@@ -28,6 +32,7 @@ os.environ['FAKE_CLAUDE_LOG'] = os.path.join(TMP, 'claude.log')
 YARP_SOCKET = os.environ.get('AUTONOMY_TEST_YARP_SOCKET', '10323')
 PORT = int(os.environ.get('AUTONOMY_TEST_PORT', '18870'))
 ROBOT_URL, APPROACH_URL, MISSION_URL = (f'http://127.0.0.1:{PORT + i}/mcp' for i in range(3))
+CAMERA_URL = f'http://127.0.0.1:{PORT + 4}/mcp'
 
 import rclpy
 from action_msgs.msg import GoalInfo, GoalStatus, GoalStatusArray
@@ -38,6 +43,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_action_status_default
 from ros2_vlmaps_interfaces.srv import LlmChat
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import String
 from surface_detector_interfaces.action import ReachObject
 
@@ -83,7 +89,17 @@ class FakeRos(Node):
         self.chat = self.create_client(LlmChat, 'chat_agent/user_text', callback_group=self.cb)
         self.create_subscription(String, 'llm_reasoning', lambda m: self.announced.append(m.data), 10,
                                  callback_group=self.cb)
+        self.image_pub = self.create_publisher(Image, '/test_camera/img', 10)
+        self.chat_images = []
+        self.create_subscription(CompressedImage, 'chat_image', lambda m: self.chat_images.append(bytes(m.data)), 10,
+                                 callback_group=self.cb)
         self.publish_nav(False)
+
+    def publish_image(self, bgr, encoding='bgr8'):
+        pixels = bgr[:, :, ::-1] if encoding == 'rgb8' else bgr
+        channels = 1 if pixels.ndim == 2 else 3
+        self.image_pub.publish(Image(height=pixels.shape[0], width=pixels.shape[1], encoding=encoding,
+                                     step=pixels.shape[1] * channels, data=pixels.tobytes()))
 
     def on_goal(self, goal):
         self.goals.append(goal.object_string)
@@ -225,6 +241,55 @@ def test_approach(ros):
     tool(APPROACH_URL, 'wait_for_approach', {'timeout_s': 5.0})
 
 
+def look_image(result):
+    data = next(item.data for item in result.content if item.type == 'image')
+    return cv2.imdecode(np.frombuffer(base64.b64decode(data), np.uint8), cv2.IMREAD_COLOR), base64.b64decode(data)
+
+
+def test_camera(ros):
+    result = tool(CAMERA_URL, 'look')
+    check('no frame yet is reported', result.is_error and 'no frame received' in text_of(result), text_of(result))
+    check('nothing for the chat', not ros.chat_images)
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    frame[:, :, 2] = 200    # red in BGR
+    time.sleep(0.5)         # the subscription of the server
+    for encoding in ('bgr8', 'rgb8'):
+        ros.publish_image(frame, encoding)
+        time.sleep(0.2)
+        result = tool(CAMERA_URL, 'look')
+        check(f'{encoding} returned', not result.is_error, text_of(result))
+        image, jpeg = look_image(result)
+        check(f'{encoding} keeps its colors', image[..., 2].mean() > 150 and image[..., 0].mean() < 50, image.mean(axis=(0, 1)).tolist())
+        check(f'{encoding} is downscaled', image.shape[:2] == (240, 320), image.shape)
+    check('same frame for the chat', wait(lambda: len(ros.chat_images) == 2 and ros.chat_images[-1] == jpeg), len(ros.chat_images))
+    ros.publish_image(np.full((48, 64), 120, dtype=np.uint8), 'mono8')
+    time.sleep(0.2)
+    image, _ = look_image(tool(CAMERA_URL, 'look'))
+    check('mono8 returned', image.shape[:2] == (48, 64) and abs(image.mean() - 120) < 3, image.shape)
+    time.sleep(0.2)
+    n = len(ros.chat_images)
+    time.sleep(0.8)
+    result = tool(CAMERA_URL, 'look')
+    check('an old frame is refused', result.is_error and 's old' in text_of(result), text_of(result))
+    time.sleep(0.2)
+    check('an old frame does not reach the chat', len(ros.chat_images) == n, len(ros.chat_images) - n)
+
+    # ---- the web chat shows it
+    probe = subprocess.Popen([sys.executable, os.path.join(HERE, 'web_chat_probe.py')], env=env(), stdout=subprocess.PIPE, text=True)
+    deadline = time.time() + 12.0
+    while time.time() < deadline and probe.poll() is None:
+        ros.publish_image(frame)
+        time.sleep(0.15)
+        tool(CAMERA_URL, 'look')
+    try:
+        out = probe.communicate(timeout=3.0)[0]
+    except subprocess.TimeoutExpired:
+        probe.kill()
+        out = probe.communicate()[0]
+    check('the web chat gets the image', out.startswith('robot_image:data:image/jpeg;base64,'), out[:80])
+
+
 def test_mission(ros, stops):
     # ---- result, session, refusal
     result = tool(MISSION_URL, 'start_mission', {'request': 'go there'})
@@ -234,7 +299,8 @@ def test_mission(ros, stops):
     call = claude_calls()[-1]
     check('orchestrator workspace', call['cwd'].endswith('agents/orchestrator'), call['cwd'])
     argv = call['argv']
-    check('both servers configured', set(json.loads(argv[argv.index('--mcp-config') + 1])['mcpServers']) == {'robot', 'approach'})
+    check('all servers configured', set(json.loads(argv[argv.index('--mcp-config') + 1])['mcpServers']) == {'robot', 'approach', 'camera'})
+    check('camera allowed', 'mcp__camera' in argv[argv.index('--allowedTools'):argv.index('--disallowedTools')])
     check('no session on the first mission', '--resume' not in argv)
     check('model passed', argv[argv.index('--model') + 1] == 'sonnet')
     check('prompt is the system prompt', argv[argv.index('--system-prompt-file') + 1].endswith('orchestrator/CLAUDE.md'))
@@ -464,9 +530,9 @@ def test_unconfirmed_stop(ros):
     check('unconfirmed stop is said plainly', 'could not confirm' in reply.answer, reply)
 
 
-def reachable(url):
+def reachable(url, name='list_operations'):
     try:
-        tool(url, 'list_operations')
+        tool(url, name)
         return True
     except Exception:
         return False
@@ -480,8 +546,15 @@ def env():
 def start_mission_server(port, timeout=900.0):
     return subprocess.Popen([sys.executable, '-m', 'semantic_autonomy.mission_server', '--server_name', f'mission{port}',
                              '--mcp_port', str(port), '--claude_bin', FAKE_CLAUDE, '--robot_mcp_url', ROBOT_URL,
-                             '--approach_mcp_url', APPROACH_URL, '--mission_timeout', str(timeout)],
+                             '--approach_mcp_url', APPROACH_URL, '--camera_mcp_url', CAMERA_URL,
+                             '--mission_timeout', str(timeout)],
                             env=env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def start_camera_server(log):
+    return subprocess.Popen([sys.executable, '-m', 'semantic_autonomy.camera_server', '--server_name', 'camera_test',
+                             '--mcp_port', str(PORT + 4), '--image_topic', '/test_camera/img',
+                             '--camera_max_width', '320', '--max_image_age', '0.5'], env=env(), stdout=log, stderr=log)
 
 
 def start_chatter(backend, *args, log=None, environ=None):
@@ -517,11 +590,14 @@ def main():
     subprocess.run(['yarp', 'conf', '127.0.0.1', YARP_SOCKET], stdout=subprocess.DEVNULL)
     servers = [subprocess.Popen([sys.executable, '-m', 'semantic_autonomy.approach_server', '--server_name', 'approach_test',
                                  '--mcp_port', str(PORT + 1)], env=env(), stdout=log, stderr=log),
-               start_mission_server(PORT + 2)]
+               start_mission_server(PORT + 2),
+               start_camera_server(log)]
     llm = FakeLlm(PORT + 5)
     chatter = start_chatter('ollama', '-p', f'backend_url:=http://127.0.0.1:{PORT + 5}/v1', '-p', 'backend_model:=fake', log=log)
     try:
-        assert wait(lambda: reachable(APPROACH_URL) and reachable(MISSION_URL), 20.0), 'servers not up'
+        assert wait(lambda: reachable(APPROACH_URL) and reachable(MISSION_URL) and reachable(CAMERA_URL, 'look'), 20.0), 'servers not up'
+        ros.chat_images.clear()
+        test_camera(ros)
         test_approach(ros)
         test_mission(ros, stops)
         test_timeout(ros, stops)

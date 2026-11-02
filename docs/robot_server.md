@@ -7,7 +7,8 @@
 ## 1. What it is
 
 An MCP server over the semantic map and Nav2, used by the navigator agent. It holds the robot-specific logic so
-the agent decides *what* to do and the tools compute *where*. It contains no LLM.
+the agent decides *what* to do and the tools compute *where*. It contains no LLM. The camera tool `look` is in
+`camera_server.py`.
 
 **Key files**
 - `semantic_autonomy/robot_server.py` — `RobotBridge` (ROS node) + the MCP tool definitions.
@@ -30,7 +31,7 @@ For a terminal session on the robot without the chat, start the servers and run 
 ## 3. `RobotBridge` — what backs the tools
 
 A ROS node holding: a `tf2` buffer for the robot pose, service clients to the semantic map server
-(`query_objects`, `describe_area`, `pub_goal`, `index_map`), a camera-image service client, and
+(`query_objects`, `describe_area`, `pub_goal`, `index_map`), and
 Nav2 `NavigateToPose` / `ComputePathToPose` action clients.
 
 - **Candidate cache** — every `find_objects` call assigns stable ids (`"chair#1"`, ranked by size,
@@ -51,8 +52,7 @@ Nav2 `NavigateToPose` / `ComputePathToPose` action clients.
 Relevant params (all on `RobotBridge`, `DEFAULT_PARAMS` in `robot_server.py`): `map_frame`,
 `robot_base_frame`, the five service/action name params, `footprint_radius` (0.8 m),
 `facing_conf_threshold` (0.5), `approach_conf_threshold` (0.4), `lies_flat_threshold` (0.6, top
-fraction above which an object is treated as having no front), `camera_max_width` (960 px, images
-are downscaled before reaching the LLM).
+fraction above which an object is treated as having no front).
 
 ---
 
@@ -75,7 +75,6 @@ All are methods marked with `@mcp_tool`. Positions are meters/radians in the `ma
 | `get_operation_status(operation_id)`, `list_operations(active_only=True)`, `cancel_operation(operation_id)` | Standard operation tools. Status, distance remaining, recoveries and elapsed time are in the snapshot's `details`. |
 | `cancel_navigation()` | Cancel the active Nav2 goal. |
 | `highlight_in_rviz(category)` | Highlight a category's voxels in RViz (red = match, blue = rest) for the human watching; returns no positions. |
-| `look()` | Current RGB camera frame as a JPEG `Image`, downscaled to `camera_max_width`. |
 
 Tool errors are normalized through `_run()`: any exception becomes a `ToolError` carrying its
 message (unknown candidate id, Nav2 unavailable, ...), since MCP otherwise only forwards a bare
@@ -86,5 +85,5 @@ message (unknown candidate id, Nav2 unavailable, ...), since MCP otherwise only 
 ## 5. ROS interfaces touched
 
 **Services** (`ros2_vlmaps_interfaces/srv`): `QueryObjects`, `DescribeArea`, `PublishGoal`,
-`IndexMap`, `CameraRGB` — all served by `semantic_map_server` / `semantic_map_builder`.
+`IndexMap` — all served by `semantic_map_server`.
 **Actions**: Nav2's `NavigateToPose`, `ComputePathToPose`.

@@ -12,14 +12,12 @@
             <param name="describe_area_service">semantic_map_server/describe_area</param>
             <param name="goal_pub_service">semantic_map_server/pub_goal</param>
             <param name="index_map_service">semantic_map_server/index_map</param>
-            <param name="camera_service">semantic_map_builder/robot_camera_rgb</param>
             <param name="navigate_action">navigate_to_pose</param>
             <param name="compute_path_action">compute_path_to_pose</param>
             <param name="footprint_radius" extern-name="footprint_radius">0.8</param>
             <param name="facing_conf_threshold">0.5</param>
             <param name="approach_conf_threshold">0.4</param>
             <param name="lies_flat_threshold">0.6</param>
-            <param name="camera_max_width">960</param>
         </device>
     </devices>
 </robot>

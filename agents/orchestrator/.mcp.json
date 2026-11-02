@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "robot": {"type": "http", "url": "http://127.0.0.1:8765/mcp"},
-    "approach": {"type": "http", "url": "http://127.0.0.1:8766/mcp"}
+    "approach": {"type": "http", "url": "http://127.0.0.1:8766/mcp"},
+    "camera": {"type": "http", "url": "http://127.0.0.1:8768/mcp"}
   }
 }

@@ -4,10 +4,12 @@
 
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String  # Using String messages for chat
 from ros2_vlmaps_interfaces.srv import LlmChat
 from flask import Flask, render_template
 from flask_socketio import SocketIO
+import base64
 import threading
 
 # Initialize Flask
@@ -21,12 +23,20 @@ class RosChatBackend(Node):
         self.subscription = self.create_subscription(
             String, "llm_reasoning", self.callback, 10
         )
+        self.image_subscription = self.create_subscription(
+            CompressedImage, "chat_image", self.image_callback, 10
+        )
         self.chat_client = self.create_client(LlmChat, "/chat_agent/user_text")
         self.chat_client_lock = threading.Lock()
 
     def callback(self, msg : String):
         print(f"Received message: {msg.data}")
         socketio.emit("chat_message", {"message": msg.data})  # Send to frontend
+
+    def image_callback(self, msg : CompressedImage):
+        # index.html shows a message with this prefix as an image
+        data = base64.b64encode(bytes(msg.data)).decode()
+        socketio.emit("chat_message", {"message": f"robot_image:data:image/jpeg;base64,{data}"})
 
     def send_user_message(self, text: str):
         request = LlmChat.Request()
@@ -82,7 +92,9 @@ def main():
     ros2_thread.start()
 
     # Start Flask app with WebSocket support
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    # No debug mode: on 0.0.0.0 its debugger would run code for anyone on the network.
+    # allow_unsafe_werkzeug: without it the server only starts from a terminal, not from a script or Docker.
+    socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
 
 
 if __name__ == "__main__":

@@ -36,11 +36,12 @@ DEFAULT_PARAMS = {
     'model': 'sonnet',
     'robot_mcp_url': 'http://127.0.0.1:8765/mcp',
     'approach_mcp_url': 'http://127.0.0.1:8766/mcp',
+    'camera_mcp_url': 'http://127.0.0.1:8768/mcp',
     'mission_timeout': 900.0,           # [s]
 }
 # Settings files allow nothing for a headless turn: the permissions have to be on the command line.
 # mcp__robot cannot be denied here, it would be denied to the navigator too.
-ALLOWED_TOOLS = ['Agent', 'mcp__approach', 'mcp__robot']
+ALLOWED_TOOLS = ['Agent', 'mcp__approach', 'mcp__camera', 'mcp__robot']
 DISALLOWED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch']
 STOP_TIMEOUT = 5.0  # [s], for each server
 
@@ -98,7 +99,8 @@ class Yarp_mcpServer_Mission(Yarp_mcpServer_Operations):
     def _command(self, request):
         mcp_config = json.dumps({"mcpServers": {
             "robot": {"type": "http", "url": self.params['robot_mcp_url']},
-            "approach": {"type": "http", "url": self.params['approach_mcp_url']}}})
+            "approach": {"type": "http", "url": self.params['approach_mcp_url']},
+            "camera": {"type": "http", "url": self.params['camera_mcp_url']}}})
         # As a system prompt: from CLAUDE.md alone it is background context, and the final check gets skipped
         cmd = [self.params['claude_bin'], '-p', request, '--output-format', 'json',
                '--system-prompt-file', os.path.join(self.params['agent_dir'], 'CLAUDE.md'),

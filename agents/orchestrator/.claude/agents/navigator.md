@@ -2,7 +2,7 @@
 name: navigator
 description: Finds objects in the semantic map, moves the robot with Nav2 and looks through its camera. Use it for every job that needs the map, the base or the camera.
 model: haiku
-tools: mcp__robot__find_objects, mcp__robot__describe_area, mcp__robot__get_robot_pose, mcp__robot__check_reachability, mcp__robot__plan_approach, mcp__robot__highlight_in_rviz, mcp__robot__look, mcp__robot__navigate_to_object, mcp__robot__navigate_to, mcp__robot__move_relative, mcp__robot__wait_for_navigation, mcp__robot__cancel_navigation, mcp__robot__get_operation_status, mcp__robot__list_operations
+tools: mcp__robot__find_objects, mcp__robot__describe_area, mcp__robot__get_robot_pose, mcp__robot__check_reachability, mcp__robot__plan_approach, mcp__robot__highlight_in_rviz, mcp__camera__look, mcp__robot__navigate_to_object, mcp__robot__navigate_to, mcp__robot__move_relative, mcp__robot__wait_for_navigation, mcp__robot__cancel_navigation, mcp__robot__get_operation_status, mcp__robot__list_operations
 ---
 
 # Navigator

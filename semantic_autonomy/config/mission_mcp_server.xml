@@ -10,6 +10,7 @@
             <param name="model" extern-name="orchestrator_model">sonnet</param>
             <param name="robot_mcp_url">http://127.0.0.1:8765/mcp</param>
             <param name="approach_mcp_url">http://127.0.0.1:8766/mcp</param>
+            <param name="camera_mcp_url">http://127.0.0.1:8768/mcp</param>
             <param name="mission_timeout" extern-name="mission_timeout">900.0</param>
         </device>
     </devices>

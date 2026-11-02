@@ -1,7 +1,7 @@
 {
-  "enabledMcpjsonServers": ["robot", "approach"],
+  "enabledMcpjsonServers": ["robot", "approach", "camera"],
   "permissions": {
-    "allow": ["Agent", "mcp__approach", "mcp__robot"],
+    "allow": ["Agent", "mcp__approach", "mcp__camera", "mcp__robot"],
     "deny": ["Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch"]
   }
 }

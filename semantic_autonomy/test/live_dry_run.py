@@ -19,6 +19,8 @@ os.environ['AUTONOMY_TEST_DOMAIN_ID'] = '84'
 os.environ['AUTONOMY_TEST_YARP_SOCKET'] = '10324'
 os.environ['AUTONOMY_TEST_PORT'] = '18880'
 
+import cv2
+import numpy as np
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
@@ -44,6 +46,17 @@ def wait_mission(timeout):
             return operations[-1]
         time.sleep(1.0)
     return None
+
+
+def camera_loop(ros):
+    """A table and a red mug, which is bigger once an approach ended. Colors in BGR."""
+    while True:
+        image = np.full((240, 320, 3), 200, dtype=np.uint8)
+        cv2.rectangle(image, (0, 140), (320, 240), (40, 70, 110), -1)
+        half, height = (50, 130) if ros.goals else (20, 60)
+        cv2.rectangle(image, (160 - half, 150 - height), (160 + half, 150), (30, 30, 210), -1)
+        ros.publish_image(image)
+        time.sleep(0.2)
 
 
 def chatter_args():
@@ -72,15 +85,17 @@ def main():
     exe = MultiThreadedExecutor(num_threads=8)
     exe.add_node(ros)
     threading.Thread(target=exe.spin, daemon=True).start()
+    threading.Thread(target=camera_loop, args=(ros,), daemon=True).start()
     robot = subprocess.Popen([sys.executable, os.path.join(t.HERE, 'fake_robot_mcp.py'), LOG, str(t.PORT)],
                              stdout=log, stderr=log)
     processes = [
         robot,
         subprocess.Popen([sys.executable, '-m', 'semantic_autonomy.approach_server', '--server_name', 'approach_live',
                           '--mcp_port', str(t.PORT + 1)], env=t.env(), stdout=log, stderr=log),
+        t.start_camera_server(log),
         subprocess.Popen([sys.executable, '-m', 'semantic_autonomy.mission_server', '--server_name', 'mission_live',
                           '--mcp_port', str(t.PORT + 2), '--robot_mcp_url', t.ROBOT_URL,
-                          '--approach_mcp_url', t.APPROACH_URL, '--mission_timeout', '300'],
+                          '--approach_mcp_url', t.APPROACH_URL, '--camera_mcp_url', t.CAMERA_URL, '--mission_timeout', '300'],
                          env=t.env(), stdout=log, stderr=log),
         t.start_chatter(*chatter_args(), log=log)]
     try:
@@ -103,6 +118,7 @@ def main():
         print(f"  outcome: {(operation or {}).get('result') or (operation or {}).get('error')}", flush=True)
         show(since)
         print(f'  /reach_object goals: {ros.goals}', flush=True)
+        print(f'  images shown in the chat: {len(ros.chat_images)}', flush=True)
         time.sleep(3.0)     # the chatter tells the outcome in one more LLM turn
         print(f'  last announcement: {ros.announced[-1]}', flush=True)
 

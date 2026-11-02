@@ -2,16 +2,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Scripted robot MCP server for live_dry_run.py: the tool names of the real one, with one table and one mug.
 Every call is appended to a log with its time. While the file <log>.hold exists, a goal never arrives."""
-import base64
 import json
 import os
 import sys
 import time
 
-import cv2
-import numpy as np
 from mcp.server.mcpserver import MCPServer
-from mcp.types import CallToolResult, ImageContent, TextContent
 
 LOG, PORT = sys.argv[1], int(sys.argv[2])
 mcp = MCPServer(name='robot')
@@ -65,19 +61,6 @@ def wait_for_navigation(timeout_s: float = 60.0) -> dict:
     if os.path.exists(LOG + '.hold'):
         return {'status': 'working'}
     return {'status': 'completed', 'status_message': 'Goal reached'}
-
-
-@mcp.tool()
-def look() -> CallToolResult:
-    """Current RGB image from the robot camera."""
-    log('look')
-    image = np.full((240, 320, 3), 200, dtype=np.uint8)
-    cv2.rectangle(image, (0, 140), (320, 240), (40, 70, 110), -1)      # table
-    cv2.rectangle(image, (140, 90), (180, 150), (30, 30, 210), -1)     # red mug
-    jpeg = cv2.imencode('.jpg', image)[1].tobytes()
-    return CallToolResult(content=[TextContent(type='text', text='{"width": 320, "height": 240}'),
-                                   ImageContent(type='image', data=base64.b64encode(jpeg).decode(),
-                                                mime_type='image/jpeg')])
 
 
 @mcp.tool()

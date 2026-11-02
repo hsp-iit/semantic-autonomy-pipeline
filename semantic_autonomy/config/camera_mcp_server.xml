@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="cameraAgent" prefix="cameraAgent" portprefix="/cameraAgent" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <devices>
+        <!-- image_topic is not set: it is picked from YARP_ROBOT_NAME. Add it to force a topic. -->
+        <device name="cameraAgent" type="Yarp_mcpServer_Camera">
+            <param name="server_name" extern-name="camera_server_name">camera</param>
+            <param name="mcp_host" extern-name="mcp_host">127.0.0.1</param>
+            <param name="mcp_port" extern-name="camera_mcp_port">8768</param>
+            <param name="chat_image_topic">chat_image</param>
+            <param name="camera_max_width">960</param>
+            <param name="max_image_age" extern-name="max_image_age">1.0</param>
+        </device>
+    </devices>
+</robot>
