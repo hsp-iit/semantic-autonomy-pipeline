@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="missionAgent" prefix="missionAgent" portprefix="/missionAgent" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <devices>
+        <!-- agent_dir is not set: it is agents/orchestrator next to the package. -->
+        <device name="missionAgent" type="Yarp_mcpServer_Mission">
+            <param name="server_name" extern-name="mission_server_name">mission</param>
+            <param name="mcp_host" extern-name="mcp_host">127.0.0.1</param>
+            <param name="mcp_port" extern-name="mission_mcp_port">8767</param>
+            <param name="model" extern-name="orchestrator_model">sonnet</param>
+            <param name="robot_mcp_url">http://127.0.0.1:8765/mcp</param>
+            <param name="approach_mcp_url">http://127.0.0.1:8766/mcp</param>
+            <param name="mission_timeout" extern-name="mission_timeout">900.0</param>
+        </device>
+    </devices>
+</robot>

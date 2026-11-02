@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS2 Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <script type="text/javascript" async
+        src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script type="text/javascript" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #343541;
+            color: white;
+        }
+        #chat-container {
+            width: 90vw;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border: 4px solid #444;
+            border-radius: 10px;
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        #chatbox {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            background: url('/static/background.png') no-repeat center center;
+            background-size: cover;
+        }
+        #input-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #1f1f28;
+            border-top: 2px solid #444;
+        }
+        #chat-input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #666;
+            border-radius: 8px;
+            outline: none;
+            color: #f1f1f1;
+            background: #2b2c36;
+        }
+        #send-button {
+            padding: 12px 18px;
+            font-size: 15px;
+            border: none;
+            border-radius: 8px;
+            background: #4a8df6;
+            color: white;
+            cursor: pointer;
+        }
+        #send-button:disabled {
+            background: #5c6480;
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+        #loading-indicator {
+            min-width: 120px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #d6d8e1;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        #loading-indicator.visible {
+            opacity: 1;
+        }
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(214, 216, 225, 0.35);
+            border-top-color: #d6d8e1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .message-container {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .message {
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+            backdrop-filter: blur(10px);
+            font-size: 18px;
+        }
+        .robot .message {
+            background: rgba(220, 220, 220, 0.9);
+            text-align: left;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .robot .message { background: rgb(138, 1, 127); text-align: left; }
+        .user .message { background: rgba(1, 36, 88, 0.9); text-align: right; }
+        .robot { flex-direction: row; }
+        .user { flex-direction: row-reverse; }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin: 0 10px;
+            border: 2px solid #444;
+        }
+        .chat-image {
+            max-width: min(520px, 65vw);
+            max-height: 50vh;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="chat-container">
+        <div id="chatbox"></div>
+        <div id="input-container">
+            <input id="chat-input" type="text" placeholder="Type a message and press Enter..." autocomplete="off" />
+            <button id="send-button" type="button">Send</button>
+            <div id="loading-indicator" aria-live="polite" aria-hidden="true">
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Thinking...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var socket = io.connect("http://" + window.location.hostname + ":5000");
+        var chatInput = document.getElementById("chat-input");
+        var sendButton = document.getElementById("send-button");
+        var loadingIndicator = document.getElementById("loading-indicator");
+
+        function setLoading(isLoading) {
+            loadingIndicator.classList.toggle("visible", isLoading);
+            loadingIndicator.setAttribute("aria-hidden", String(!isLoading));
+            chatInput.disabled = isLoading;
+            sendButton.disabled = isLoading;
+            if (!isLoading) {
+                chatInput.focus();
+            }
+        }
+
+        function submitMessage() {
+            var text = chatInput.value.trim();
+            if (text.length === 0 || chatInput.disabled) {
+                return;
+            }
+            socket.emit("user_message", { message: text });
+            chatInput.value = "";
+        }
+
+        chatInput.addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                submitMessage();
+            }
+        });
+
+        sendButton.addEventListener("click", function() {
+            submitMessage();
+        });
+
+        socket.on("request_status", function(data) {
+            setLoading(Boolean(data && data.loading));
+        });
+
+        socket.on("chat_message", function(data) {
+            var chatbox = document.getElementById("chatbox");
+            var messageContainer = document.createElement("div");
+            var messageDiv = document.createElement("div");
+            var avatar = document.createElement("img");
+
+            var messageText = data.message.trim();
+            var isRobotImage = messageText.toLowerCase().startsWith("robot_image:");
+            var firstWord = messageText.split(" ")[0];
+            var userClass = "robot";  // Default to robot
+            var userImage = "/static/robot.png";  // Default robot image
+
+            if (isRobotImage) {
+                userClass = "robot";
+                userImage = "/static/robot.png";
+                messageText = messageText.substring("robot_image:".length).trim();
+            } else if (firstWord.toLowerCase() === "user:") {
+                userClass = "user";
+                userImage = "/static/user.png";
+                messageText = messageText.substring(5);
+            } else if (firstWord.toLowerCase() === "robot:") {
+                messageText = messageText.substring(6);
+            }
+
+            messageContainer.className = "message-container " + userClass;
+            messageDiv.className = "message";
+            if (isRobotImage) {
+                var imgEl = document.createElement("img");
+                imgEl.src = messageText;
+                imgEl.className = "chat-image";
+                imgEl.alt = "Robot camera image";
+                messageDiv.appendChild(imgEl);
+            } else {
+                messageDiv.innerHTML = messageText; // Allow HTML for MathJax rendering
+            }
+
+            // Apply monospaced font and formatting for robot messages
+            if (userClass === "robot" && !isRobotImage) {
+                messageDiv.style.fontFamily = "monospace";
+                messageDiv.style.whiteSpace = "pre-wrap";
+                //messageDiv.style.background = "rgba(220, 220, 220, 0.9)";
+            }
+
+            avatar.src = userImage;
+            avatar.className = "avatar";
+
+            messageContainer.appendChild(avatar);
+            messageContainer.appendChild(messageDiv);
+
+            chatbox.appendChild(messageContainer);
+            chatbox.scrollTop = chatbox.scrollHeight;
+
+            // Process MathJax after adding the new message
+            if (!isRobotImage) {
+                MathJax.typesetPromise([messageDiv]).catch(function (err) {
+                    console.error("MathJax rendering error:", err);
+                });
+            }
+        });
+    </script>
+
+</body>
+</html>

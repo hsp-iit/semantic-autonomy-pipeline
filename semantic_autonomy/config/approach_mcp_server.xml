@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="approachAgent" prefix="approachAgent" portprefix="/approachAgent" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <devices>
+        <device name="approachAgent" type="Yarp_mcpServer_Approach">
+            <param name="server_name" extern-name="approach_server_name">approach</param>
+            <param name="mcp_host" extern-name="mcp_host">127.0.0.1</param>
+            <param name="mcp_port" extern-name="approach_mcp_port">8766</param>
+            <param name="reach_action">/reach_object</param>
+            <param name="nav_status_topic">navigate_to_pose/_action/status</param>
+        </device>
+    </devices>
+</robot>

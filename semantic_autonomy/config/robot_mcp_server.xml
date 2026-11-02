@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE robot PUBLIC "-//YARP//DTD yarprobotinterface 3.0//EN" "http://www.yarp.it/DTD/yarprobotinterfaceV3.0.dtd">
+<robot name="robotAgent" prefix="robotAgent" portprefix="/robotAgent" xmlns:xi="http://www.w3.org/2001/XInclude">
+    <devices>
+        <!-- robot_base_frame is not set: it is picked from YARP_ROBOT_NAME. Add it to force a frame. -->
+        <device name="robotAgent" type="Yarp_mcpServer_Robot">
+            <param name="server_name" extern-name="robot_server_name">robot</param>
+            <param name="mcp_host" extern-name="mcp_host">127.0.0.1</param>
+            <param name="mcp_port" extern-name="robot_mcp_port">8765</param>
+            <param name="map_frame" extern-name="map_frame">map</param>
+            <param name="query_objects_service">semantic_map_server/query_objects</param>
+            <param name="describe_area_service">semantic_map_server/describe_area</param>
+            <param name="goal_pub_service">semantic_map_server/pub_goal</param>
+            <param name="index_map_service">semantic_map_server/index_map</param>
+            <param name="camera_service">semantic_map_builder/robot_camera_rgb</param>
+            <param name="navigate_action">navigate_to_pose</param>
+            <param name="compute_path_action">compute_path_to_pose</param>
+            <param name="footprint_radius" extern-name="footprint_radius">0.8</param>
+            <param name="facing_conf_threshold">0.5</param>
+            <param name="approach_conf_threshold">0.4</param>
+            <param name="lies_flat_threshold">0.6</param>
+            <param name="camera_max_width">960</param>
+        </device>
+    </devices>
+</robot>
