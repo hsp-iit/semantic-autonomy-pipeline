@@ -49,7 +49,7 @@ The chatter defaults to Azure. `AZURE_API_MODE` selects `responses` (default) or
 needs `AZURE_API_VERSION`.
 
 ```bash
-export AZURE_API_KEY=... AZURE_ENDPOINT=... DEPLOYMENT_ID=...
+set -a; . ~/.config/config.env; set +a     # a file with AZURE_API_KEY, AZURE_ENDPOINT and DEPLOYMENT_ID
 ~/ws_ros2/src/semantic-autonomy-pipeline/scripts/run_all.sh
 ```
 
@@ -109,13 +109,20 @@ python3 test_stack.py                           # Scripted LLMs and robot: no us
 python3 live_dry_run.py                         # Real orchestrator and navigator over a scripted robot: spends Claude usage
 python3 live_dry_run.py azure                   # The same with a real chatter
 python3 live_dry_run.py ollama <url> <model>
+python3 chatter_intent_check.py azure           # Tricky messages against the model only: no robot, no servers
+python3 chatter_intent_check.py ollama <url> <model>
 ```
+
+Run `chatter_intent_check.py` on any new model before using it: it shows which tool the model picks for messages
+like "stop at the table and take a photo" or "forget it".
 
 ## Known gaps
 
-- **No real chatter model has been tested.** Azure and Ollama ran through their real backend classes, against a
-  scripted server. How well a given model calls `start_mission` is unknown, and it matters: a model that says "on
-  it" without calling the tool leaves the person waiting for nothing. Test a local model with `live_dry_run.py`.
+- **Only one real chatter model has been tested.** An Azure deployment passed 18 of 18 messages in
+  `chatter_intent_check.py`, twice, and a full `live_dry_run.py azure`. No Ollama model has run. How well a model
+  calls `start_mission` matters: one that says "on it" without the call leaves the person waiting for nothing.
+- **A model with reasoning can return no text.** On a test call limited to 200 tokens, one GPT-5 deployment gave
+  empty replies. If the chatter stays silent, raise `max_tokens`.
 - **Not run on the robot.** Real Nav2, the semantic map, DINO/SAM, the arms and real audio have not been part of
   any run of this pipeline. The robot server moved with its tool schemas unchanged, but nothing has driven it here.
 - **The orchestrator can see the robot tools.** Claude Code offers no way to give an MCP server to a sub-agent alone

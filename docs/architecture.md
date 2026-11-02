@@ -91,5 +91,10 @@ With the real orchestrator and navigator over a scripted robot (`test/live_dry_r
 | Final report | Without a change in the image, it said the camera did not confirm the approach. With a mug that grows after the approach, it confirmed it |
 | Stop during a mission | Replied in well under a second, mission `cancelled`, navigation cancelled |
 
-These are not robot timings: the scripted robot answers at once, so a real mission takes much longer. These runs
-used a scripted or Claude chatter, not a real Azure or Ollama model.
+These are not robot timings: the scripted robot answers at once, so a real mission takes much longer. With a real
+Azure chatter, replies took 2 to 3 s through the whole chain, and the chatter turned the long report of the
+orchestrator into one spoken sentence.
+
+The first run of `test/chatter_intent_check.py` on Azure showed the prompt at fault, not the model: told to ask when
+a request was vague, it asked "what of?" to "take a photo", and to "behave accordingly". Told to offer an alternative
+to grasping, it started the mission without waiting. The rules in `prompt.md` now say so explicitly.
