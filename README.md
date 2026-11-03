@@ -69,13 +69,13 @@ but not Nav2 or `ergocub_navigation`. Three of the repositories are private, so 
 secret. It clones the pushed branches: local changes are not in the image.
 
 ```bash
-echo "$GITHUB_TOKEN" > /tmp/gh_token
-DOCKER_BUILDKIT=1 docker build --secret id=github_token,src=/tmp/gh_token -t semantic_autonomy -f docker/Dockerfile .
+export GITHUB_TOKEN=...   # or log in with gh
+docker/build.sh           # --refresh clones the repositories again, other options go to docker build
 docker/run.sh
 ```
 
-`docker/Dockerfile_yarp4` is the same with YARP v4.0.1 and the `YARP4` branch of `yarp-devices-ros2`: tag it
-`semantic_autonomy:yarp4` and start it with `IMAGE=semantic_autonomy:yarp4 docker/run.sh`.
+`docker/Dockerfile_yarp4` is the same with YARP v4.0.1 and the `YARP4` branch of `yarp-devices-ros2`: build it with
+`docker/build.sh --yarp4` and start it with `IMAGE=semantic_autonomy:yarp4 docker/run.sh`.
 
 `docker/run.sh` mounts the CycloneDDS and YARP configurations, `config.env`, the maps and the Claude Code login of the host
 when they exist: see the top of the script.
