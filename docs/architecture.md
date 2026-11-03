@@ -43,9 +43,12 @@ orchestrator's whole process group first, because it could otherwise send anothe
 **A mission that ends badly stops the robot.** After a timeout or a crash nobody watches the goal any more, so
 the mission server cancels it. Cancelling a mission does the same.
 
+**The orchestrator is the only one that sees.** The navigator moves the robot and reports what it believes. After
+each move the orchestrator calls `look` and verifies that the robot is in the proper position, so the agent that set
+the goal never marks its own work. Both run on Sonnet: the navigator has the geometric reasoning to do.
+
 **The camera is its own server.** `look` reads the image topic directly, so it works without the map or the
-navigation, and the orchestrator can verify a result with its own model, without spending a navigator turn. It
-refuses a frame older than `max_image_age`: these checks are what a mission relies on, so an old image would be
+navigation. It refuses a frame older than `max_image_age`: these checks are what a mission relies on, so an old image would be
 worse than none. Taking a photo means this and nothing more: the image goes to the agent, and to the web chat on the
 `chat_image` topic if one is open. Nothing is saved. The chat has its own topic because `speech_bridge` reads
 `llm_reasoning` aloud.
@@ -65,7 +68,7 @@ folder.
 |---|---|
 | Chatter | `start_mission`, `stop_all`, `get_tracked_operation`, `list_tracked_operations` |
 | Orchestrator | `Agent`, approach tools, `look`, and robot tools (see below) |
-| Navigator | The tools listed in `navigator.md`: robot tools except `cancel_operation`, and `look` |
+| Navigator | The robot tools listed in `navigator.md`, except `cancel_operation`. No camera |
 
 The orchestrator should not use the robot tools, but it can. Tested with Claude Code 2.1.316: a server declared in
 the sub-agent's frontmatter did not connect, and denying `mcp__robot` to the orchestrator also denied it to the

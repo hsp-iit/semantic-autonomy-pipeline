@@ -130,7 +130,7 @@ like "stop at the table and take a photo" or "forget it".
 - **Hands stay raised.** Nothing lowers them after an approach or a cancel, so the next navigation walks with raised
   arms. Lowering them belongs in `manipulation-approach`.
 - **No head control.** `/reach_object` needs the object in view at the start. With a fixed head, the 0.8 m standoff
-  of the navigator may not show it. The orchestrator checks with the camera and reports it.
+  of the navigator may not show it. The orchestrator checks with the camera, and reports it.
 - **`look` has been tested on generated images only.** The image topic comes from `YARP_ROBOT_NAME`, or from
   `image_topic` in `config/camera_mcp_server.xml`. The display in the web page itself was not checked in a browser:
   the tests stop at the message the page receives.
