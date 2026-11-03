@@ -16,7 +16,7 @@ FROM nvidia/cuda:12.8.0-devel-ubuntu24.04
 
 ENV USER=user1
 ARG PASSWORD=user1
-# GPU architectures for the CUDA extensions built here (MSDeformAttn, Grounding DINO)
+# GPU architectures for the CUDA extension of Grounding DINO
 ARG TORCH_CUDA_ARCH_LIST="7.5;8.6;8.9"
 SHELL ["/bin/bash", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
@@ -98,24 +98,21 @@ ENV PIP_BREAK_SYSTEM_PACKAGES=1 PIP_NO_CACHE_DIR=1
 ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} FORCE_CUDA=1
 ENV PATH=/home/${USER}/.local/bin:${PATH}
 RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-# visual-language-navigation (from its docker/Dockerfile_u24_cu128_yarp4, plus the imports it lacks)
-RUN pip3 install hydra-core gdown openai-clip h5py timm pyvisgraph pytorch_lightning odfpy networkx \
+# visual-language-navigation (from its docker/Dockerfile_u24_cu128_yarp4, plus the imports it lacks), without the LSeg
+# and FC-CLIP encoders: no detectron2, no openai-clip (only LSeg imports it), and only the RADIO checkpoint below
+RUN pip3 install hydra-core gdown h5py timm pyvisgraph pytorch_lightning odfpy networkx \
         opencv-python matplotlib open3d "numpy>=2" scipy scikit-learn pandas psutil pynvml tqdm tabulate && \
     pip3 install --no-deps gtsam==4.3.0 && \
-    pip3 install openai flask_socketio accelerate gradio rerun torch_scatter einops "transformers<5" && \
-    pip3 install --no-build-isolation 'git+https://github.com/facebookresearch/detectron2.git'
-# manipulation-approach (from its docker/Dockerfile)
-RUN pip3 install addict yapf "supervision>=0.22.0" pycocotools ultralytics shapely && \
-    pip3 install "git+https://github.com/ultralytics/CLIP.git"
+    pip3 install openai flask_socketio accelerate gradio rerun torch_scatter einops "transformers<5"
+# manipulation-approach (from its docker/Dockerfile). Not ultralytics/CLIP: only text-prompted models use it, the
+# detector prompts SAM 2 with boxes.
+RUN pip3 install addict yapf "supervision>=0.22.0" pycocotools ultralytics shapely
 RUN git clone -b cuda12.8-fix https://github.com/SimoneMic/GroundingDINO.git && \
     cd GroundingDINO && pip3 install --no-build-isolation -e . && \
     mkdir weights && wget -nv -O weights/groundingdino_swint_ogc.pth \
         https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
 # Grounding DINO downloads its text encoder on first use: cache it now
 RUN python3 -c "from transformers import BertModel, BertTokenizer; BertTokenizer.from_pretrained('bert-base-uncased'); BertModel.from_pretrained('bert-base-uncased')"
-# CLIP backbone of visual-language-navigation
-RUN mkdir -p ~/.cache/clip && wget -nv -O ~/.cache/clip/ViT-B-32.pt \
-    https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt
 
 # ---------------------------------------------------------------- Claude Code CLI, for the orchestrator and the navigator
 RUN curl -fsSL https://claude.ai/install.sh | bash && claude --version
@@ -146,13 +143,15 @@ RUN cd yarp-mcpServers && python3 install_packages.py && \
     cd ../yarp-mcpHosts && python3 install_packages.py && \
     python3 -c "import yarp_mcpServer_core, yarp_mcpServer_ros2, yarp_mcpHost_core, yarp_mcpHost_generalPurpose"
 
-# visual-language-navigation: FC-CLIP, its CUDA kernel and the checkpoints, then the ROS packages
-RUN cd visual-language-navigation/visual_language_navigation/encoders/fcclip && \
-    pip3 install -r requirements.txt && \
-    cd fcclip/modeling/pixel_decoder/ops && pip3 install --no-build-isolation --user .
-RUN cd visual-language-navigation/docker && python3 download_hf_model.py && python3 download_radio_ckp.py
+# visual-language-navigation: the RADIO checkpoint, then the ROS packages. Not LSeg (download_hf_model.py and the CLIP
+# ViT-B/32 weights) nor FC-CLIP: seg_model_name must stay radio (the default) or naradio
+RUN cd visual-language-navigation/docker && python3 download_radio_ckp.py
 RUN cd visual-language-navigation && source /opt/ros/$ROS_DISTRO/setup.bash && \
     colcon build --symlink-install --packages-select ros2_vlmaps_interfaces visual_language_navigation
+# Without openai-clip, the map server only imports if voxel_feat_map.py imports clip_utils in the LSeg branch alone
+RUN source /opt/ros/$ROS_DISTRO/setup.bash && source visual-language-navigation/install/local_setup.bash && \
+    PYTHONPATH=~/visual-language-navigation:$PYTHONPATH python3 -c "import visual_language_navigation.map.semantic_map_server" || \
+    (echo "The visual-language-navigation branch still needs openai-clip at import: push the voxel_feat_map.py change" && exit 1)
 
 # manipulation-approach and semantic-autonomy-pipeline, in one workspace
 RUN cd ws_ros2 && source /opt/ros/$ROS_DISTRO/setup.bash && \
