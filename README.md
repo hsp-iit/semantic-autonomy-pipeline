@@ -62,6 +62,24 @@ scripts/run_all.sh --ros-args -p backend:=ollama -p backend_url:=http://<host>:1
 `run_all.sh` starts the four MCP servers and the chatter. `Ctrl+C` stops everything and cancels the goals. It does
 not start the web chat or the voice bridge: see below.
 
+## Docker
+
+`docker/Dockerfile` holds this repository, `visual-language-navigation`, `manipulation-approach` and their dependencies,
+but not Nav2 or `ergocub_navigation`. Three of the repositories are private, so the build takes a GitHub token as a
+secret. It clones the pushed branches: local changes are not in the image.
+
+```bash
+echo "$GITHUB_TOKEN" > /tmp/gh_token
+DOCKER_BUILDKIT=1 docker build --secret id=github_token,src=/tmp/gh_token -t semantic_autonomy -f docker/Dockerfile .
+docker/run.sh
+```
+
+`docker/Dockerfile_yarp4` is the same with YARP v4.0.1 and the `YARP4` branch of `yarp-devices-ros2`: tag it
+`semantic_autonomy:yarp4` and start it with `IMAGE=semantic_autonomy:yarp4 docker/run.sh`.
+
+`docker/run.sh` mounts the CycloneDDS and YARP configurations, `config.env`, the maps and the Claude Code login of the host
+when they exist: see the top of the script.
+
 ## Run each part alone
 
 Use one terminal for each part, and start every terminal with this. The `PYTHONPATH` line is required: the chatter and
@@ -84,6 +102,12 @@ cd ~/ws_ros2/src/semantic-autonomy-pipeline/semantic_autonomy
 | Chatter | `python3 -m semantic_autonomy.chatter` | | The backend settings of [Run](#run). It waits for the mission server |
 | Web chat | `python3 -m semantic_autonomy.web_chat.backend` | 5000 | The chatter, to answer. Open `http://<robot>:5000` |
 | Voice bridge | `ros2 run speech_pipeline speech_bridge` | | The chatter, and the YARP speech ports |
+
+To watch Nav2, the semantic map and the approach (DINO and SAM images, surface, candidate goals) in one window:
+
+```bash
+rviz2 -d ~/ws_ros2/src/semantic-autonomy-pipeline/semantic_autonomy/config/rviz/autonomy.rviz
+```
 
 The orchestrator and the navigator are not processes to start: the mission server runs them. To talk to them
 directly, with the first three servers running and no chat:
